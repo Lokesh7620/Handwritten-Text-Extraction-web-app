@@ -9,11 +9,13 @@ import os
 import uuid
 
 # Import appropriate OCR processor based on environment
+ocr_processor = None
+
 try:
     from utils.advanced_ocr_processor import AdvancedOCRProcessor
     ocr_processor = AdvancedOCRProcessor()
     print("[INFO] Using Advanced OCR Processor (full features)")
-except ImportError as e:
+except Exception as e:
     print(f"[INFO] Advanced OCR not available, trying lightweight: {e}")
     try:
         from utils.lightweight_ocr_processor import LightweightOCRProcessor
@@ -24,9 +26,13 @@ except ImportError as e:
         print("[INFO] Using Lightweight OCR Processor (Tesseract)")
     except Exception as e:
         print(f"[WARN] Lightweight OCR failed: {e}, using fallback")
-        from utils.fallback_ocr_processor import FallbackOCRProcessor
-        ocr_processor = FallbackOCRProcessor()
-        print("[INFO] Using Fallback OCR Processor (no external dependencies)")
+        try:
+            from utils.fallback_ocr_processor import FallbackOCRProcessor
+            ocr_processor = FallbackOCRProcessor()
+            print("[INFO] Using Fallback OCR Processor (no external dependencies)")
+        except Exception as fallback_e:
+            print(f"[ERROR] Even fallback OCR failed to load: {fallback_e}")
+            ocr_processor = None
 
 main = Blueprint('main', __name__)
 
@@ -61,11 +67,18 @@ def extract():
 @login_required
 def upload_file():
     try:
-        # Check OCR availability first
+        # Check OCR availability
+        if ocr_processor is None:
+            return jsonify({
+                'error': 'No OCR service is available. Please check the installation.',
+                'available_methods': [],
+                'installation_help': 'Run: pip install -r requirements.txt'
+            }), 500
+            
         if not ocr_processor.is_available():
             return jsonify({
                 'error': 'No OCR service is available. Please check the installation.',
-                'available_methods': ocr_processor.get_available_methods(),
+                'available_methods': ocr_processor.get_available_methods() if hasattr(ocr_processor, 'get_available_methods') else [],
                 'installation_help': 'Run: pip install -r requirements.txt'
             }), 500
         
@@ -89,24 +102,26 @@ def upload_file():
                 print(f"[INFO] File saved: {filepath}")
                 
                 # Show available OCR methods
-                print(f"[INFO] Available OCR methods: {ocr_processor.get_available_methods()}")
+                available_methods = ocr_processor.get_available_methods() if hasattr(ocr_processor, 'get_available_methods') else []
+                print(f"[INFO] Available OCR methods: {available_methods}")
                 
-                # Extract text using advanced OCR processor
+                # Extract text using OCR processor
                 extraction_result = ocr_processor.extract_text(filepath)
                 
                 # Check if extraction was successful
                 if extraction_result['confidence'] < 0.2 or not extraction_result['text']:
                     # Try different methods if first attempt failed
-                    all_methods = ocr_processor.get_available_methods()
-                    for method in all_methods:
-                        if method != extraction_result.get('method'):
-                            print(f"[INFO] Retrying with {method}...")
-                            try:
-                                retry_result = ocr_processor.extract_text(filepath, force_method=method)
-                                if retry_result['confidence'] > extraction_result['confidence']:
-                                    extraction_result = retry_result
-                            except Exception as retry_err:
-                                print(f"[WARN] Retry with {method} failed: {retry_err}")
+                    if hasattr(ocr_processor, 'get_available_methods'):
+                        all_methods = ocr_processor.get_available_methods()
+                        for method in all_methods:
+                            if method != extraction_result.get('method'):
+                                print(f"[INFO] Retrying with {method}...")
+                                try:
+                                    retry_result = ocr_processor.extract_text(filepath, force_method=method)
+                                    if retry_result['confidence'] > extraction_result['confidence']:
+                                        extraction_result = retry_result
+                                except Exception as retry_err:
+                                    print(f"[WARN] Retry with {method} failed: {retry_err}")
                     
                     if extraction_result['confidence'] < 0.2 or not extraction_result['text']:
                         return jsonify({
@@ -153,7 +168,7 @@ def upload_file():
                     'quality': extraction_result.get('quality', 'unknown'),
                     'quality_score': extraction_result.get('quality_details', {}).get('score', 0),
                     'text_type': extraction_result.get('text_type', 'unknown'),
-                    'available_methods': ocr_processor.get_available_methods()
+                    'available_methods': available_methods
                 })
                 
             except Exception as e:

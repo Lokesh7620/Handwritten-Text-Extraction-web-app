@@ -674,18 +674,26 @@ function uploadFile(file) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(response => {
         clearInterval(progressInterval);
         updateProgress(100, 'Upload complete');
         
+        return response.json().then(data => ({
+            status: response.status,
+            ok: response.ok,
+            data: data
+        }));
+    })
+    .then(result => {
         setTimeout(() => {
-            if (data.success) {
-                currentDocumentId = data.document_id;
-                showResults(file, data.extracted_text);
+            if (result.ok && result.data.success) {
+                currentDocumentId = result.data.document_id;
+                showResults(file, result.data.extracted_text);
                 utils.showToast('Text extracted successfully!', 'success');
             } else {
-                utils.showToast(data.error || 'Failed to extract text', 'error');
+                const errorMsg = result.data.error || 'Failed to extract text';
+                console.warn('Upload response:', result);
+                utils.showToast(errorMsg, 'error');
                 resetToInitialState();
             }
             isProcessing = false;
@@ -694,7 +702,7 @@ function uploadFile(file) {
     .catch(error => {
         clearInterval(progressInterval);
         console.error('Upload error:', error);
-        utils.showToast('An error occurred during upload', 'error');
+        utils.showToast('An error occurred during upload. Please try again.', 'error');
         resetToInitialState();
         isProcessing = false;
     });
