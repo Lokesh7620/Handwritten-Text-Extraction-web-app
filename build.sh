@@ -2,17 +2,11 @@
 # Render.com Build Script
 # Install system dependencies and Python packages
 
+set -e  # Exit on error
+
 echo "=== Starting Render.com Build ==="
 
-# Update package lists
-echo "Updating package lists..."
-apt-get update -y
-
-# Install Tesseract OCR
-echo "Installing Tesseract OCR..."
-apt-get install -y tesseract-ocr tesseract-ocr-eng
-
-# Install Python dependencies
+# Install Python dependencies first
 echo "Installing Python packages..."
 pip install --upgrade pip
 pip install -r requirements.render.txt
