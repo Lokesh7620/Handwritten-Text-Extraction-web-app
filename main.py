@@ -14,18 +14,28 @@ ocr_processor = None
 try:
     from utils.advanced_ocr_processor import AdvancedOCRProcessor
     ocr_processor = AdvancedOCRProcessor()
-    print("[INFO] Using Advanced OCR Processor (full features)")
+    # Check if advanced processor actually has any OCR methods available
+    if ocr_processor.is_available():
+        print("[INFO] Using Advanced OCR Processor (full features)")
+    else:
+        print("[WARN] Advanced OCR Processor loaded but no methods available, trying lightweight...")
+        ocr_processor = None
+        raise ImportError("No OCR methods available in Advanced processor")
 except Exception as e:
     print(f"[INFO] Advanced OCR not available, trying lightweight: {e}")
+    ocr_processor = None
     try:
         from utils.lightweight_ocr_processor import LightweightOCRProcessor
         ocr_processor = LightweightOCRProcessor()
-        if not ocr_processor.is_available():
+        if ocr_processor.is_available():
+            print("[INFO] Using Lightweight OCR Processor (Tesseract)")
+        else:
             print("[WARN] Lightweight OCR (Tesseract) not available")
+            ocr_processor = None
             raise ImportError("Tesseract not found")
-        print("[INFO] Using Lightweight OCR Processor (Tesseract)")
     except Exception as e:
         print(f"[WARN] Lightweight OCR failed: {e}, using fallback")
+        ocr_processor = None
         try:
             from utils.fallback_ocr_processor import FallbackOCRProcessor
             ocr_processor = FallbackOCRProcessor()
@@ -67,20 +77,25 @@ def extract():
 @login_required
 def upload_file():
     try:
-        # Check OCR availability
-        if ocr_processor is None:
-            return jsonify({
-                'error': 'No OCR service is available. Please check the installation.',
-                'available_methods': [],
-                'installation_help': 'Run: pip install -r requirements.txt'
-            }), 500
+        # Ensure OCR processor is available, use fallback if needed
+        if ocr_processor is None or not ocr_processor.is_available():
+            print("[WARN] OCR processor not available, attempting fallback initialization")
+            try:
+                from utils.fallback_ocr_processor import FallbackOCRProcessor
+                fallback = FallbackOCRProcessor()
+                if fallback.is_available():
+                    global ocr_processor
+                    ocr_processor = fallback
+                    print("[INFO] Fallback OCR activated")
+            except Exception as fallback_err:
+                print(f"[ERROR] Fallback activation failed: {fallback_err}")
             
-        if not ocr_processor.is_available():
-            return jsonify({
-                'error': 'No OCR service is available. Please check the installation.',
-                'available_methods': ocr_processor.get_available_methods() if hasattr(ocr_processor, 'get_available_methods') else [],
-                'installation_help': 'Run: pip install -r requirements.txt'
-            }), 500
+            if ocr_processor is None or not ocr_processor.is_available():
+                return jsonify({
+                    'error': 'No OCR service is available. Please check the installation.',
+                    'available_methods': [],
+                    'installation_help': 'Run: pip install -r requirements.txt'
+                }), 500
         
         if 'file' not in request.files:
             return jsonify({'error': 'No file selected'}), 400
