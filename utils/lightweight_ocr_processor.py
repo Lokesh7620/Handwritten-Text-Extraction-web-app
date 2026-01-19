@@ -23,10 +23,29 @@ class LightweightOCRProcessor:
     def _check_tesseract(self):
         """Check if Tesseract is available"""
         try:
-            pytesseract.get_tesseract_version()
-            return True
-        except:
+            # Try to set tesseract command if not set
+            if not pytesseract.pytesseract.tesseract_cmd or pytesseract.pytesseract.tesseract_cmd == 'tesseract':
+                # Common paths on different systems
+                possible_paths = [
+                    '/usr/bin/tesseract',
+                    '/usr/local/bin/tesseract',
+                    'tesseract'
+                ]
+                for path in possible_paths:
+                    try:
+                        pytesseract.pytesseract.tesseract_cmd = path
+                        pytesseract.get_tesseract_version()
+                        print(f"[INFO] Tesseract found at: {path}")
+                        return True
+                    except:
+                        continue
+            else:
+                pytesseract.get_tesseract_version()
+                return True
+        except Exception as e:
+            print(f"[ERROR] Tesseract check failed: {e}")
             return False
+        return False
     
     def is_available(self):
         """Check if any OCR method is available"""
