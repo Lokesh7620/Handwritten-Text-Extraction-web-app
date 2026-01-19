@@ -14,10 +14,19 @@ try:
     ocr_processor = AdvancedOCRProcessor()
     print("[INFO] Using Advanced OCR Processor (full features)")
 except ImportError as e:
-    print(f"[INFO] Advanced OCR not available, using lightweight version: {e}")
-    from utils.lightweight_ocr_processor import LightweightOCRProcessor
-    ocr_processor = LightweightOCRProcessor()
-    print("[INFO] Using Lightweight OCR Processor (Tesseract only)")
+    print(f"[INFO] Advanced OCR not available, trying lightweight: {e}")
+    try:
+        from utils.lightweight_ocr_processor import LightweightOCRProcessor
+        ocr_processor = LightweightOCRProcessor()
+        if not ocr_processor.is_available():
+            print("[WARN] Lightweight OCR (Tesseract) not available")
+            raise ImportError("Tesseract not found")
+        print("[INFO] Using Lightweight OCR Processor (Tesseract)")
+    except Exception as e:
+        print(f"[WARN] Lightweight OCR failed: {e}, using fallback")
+        from utils.fallback_ocr_processor import FallbackOCRProcessor
+        ocr_processor = FallbackOCRProcessor()
+        print("[INFO] Using Fallback OCR Processor (no external dependencies)")
 
 main = Blueprint('main', __name__)
 
